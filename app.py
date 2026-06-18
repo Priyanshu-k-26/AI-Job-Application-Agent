@@ -92,6 +92,7 @@ Email Requirements:
 8. End with a short call-to-action expressing interest in discussing the opportunity.
 9. Do not include placeholders like [Your Name].
 10. Generate a personalized subject line specific to the company and role.
+11. Format the email body with clear paragraphs and line breaks (\n\n) for readability. Do NOT write a single block of text.
 
 Return only valid JSON.
 """
@@ -152,7 +153,10 @@ def send_email(state: State) -> State:
     msg['From'] = sender_email
     msg['To'] = receiver_address
     msg['Subject'] = email_subject
-    msg.attach(MIMEText(email_body, 'plain'))
+    
+    # Convert newlines to HTML line breaks to preserve formatting
+    email_body_html = email_body.replace('\n', '<br>')
+    msg.attach(MIMEText(email_body_html, 'html'))
 
     # --- Attach resume PDF ---
     try:
