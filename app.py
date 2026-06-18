@@ -72,6 +72,7 @@ Generate a concise, personalized, and human-like job application email in JSON f
 Candidate Information:
 
 * Name: Priyanshu Khandelwal
+* Mobile: +91 8889190396
 * Strong Python developer with experience in AI engineering and full-stack development
 * Experienced with LangChain, LangGraph, RAG systems, AI Agents, LLM integrations, OpenAI APIs, Google APIs, and workflow automation
 * Worked PetAlly, an AI-powered pet healthcare platform featuring multi-agent veterinary assistance and online vet consultation
