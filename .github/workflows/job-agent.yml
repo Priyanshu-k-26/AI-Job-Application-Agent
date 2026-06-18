@@ -2,7 +2,7 @@ name: Job Application Agent
 
 on:
   schedule:
-    - cron: '*/10 * * * *'  # Runs every 10 minutes
+    - cron: '*/5 * * * *'  # Runs every 5 minutes
   workflow_dispatch: # Allows you to trigger it manually from the Actions tab
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
 
       - name: Create Google Credentials File
         run: |
-          echo '${{ secrets.GOOGLE_CREDS_JSON }}' > credentials.json
+          echo '${{ secrets.GOOGLE_CREDENTIALS }}' > credentials.json
 
       - name: Run Job Application Agent
         env:
