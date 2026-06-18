@@ -63,10 +63,10 @@ def generate_email(state: State) -> State:
 
 Generate a concise, personalized, and human-like job application email in JSON format with the following keys:
 
-{{
+{
 "subject": "...",
 "body": "..."
-}}
+}
 
 Candidate Information:
 
@@ -94,7 +94,7 @@ Email Requirements:
 Return only valid JSON.
 """
     prompt = ChatPromptTemplate.from_messages([
-        ("system", System_prompt),
+        SystemMessage(content=System_prompt),
         ("human", "Resume: {resume_path}\n\nJob Description: {job_desc}\n\nCompany: {company}\n\nRole: {role}")
     ])
 
