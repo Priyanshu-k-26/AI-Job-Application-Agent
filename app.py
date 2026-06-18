@@ -63,10 +63,10 @@ def generate_email(state: State) -> State:
 
 Generate a concise, personalized, and human-like job application email in JSON format with the following keys:
 
-{
+{{
 "subject": "...",
 "body": "..."
-}
+}}
 
 Candidate Information:
 
