@@ -1,0 +1,21 @@
+# Environments
+.env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Credentials / Secrets
+*.json
+job-application-agent-*.json
+credentials.json
+
+# Resumes / Documents
+*.pdf
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
