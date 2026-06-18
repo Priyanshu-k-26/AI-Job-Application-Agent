@@ -13,7 +13,7 @@ job-application-agent-*.json
 credentials.json
 
 # Resumes / Documents
-*.pdf
+# Removed *.pdf so resume can be tracked for GitHub Actions
 
 # Python Cache
 __pycache__/
