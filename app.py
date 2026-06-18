@@ -59,9 +59,42 @@ def generate_email(state: State) -> State:
     job_desc = state['job_desc']
     company = state['company']
     role = state['role']
+    System_prompt = """You are a professional job application email writer.
 
+Generate a concise, personalized, and human-like job application email in JSON format with the following keys:
+
+{
+"subject": "...",
+"body": "..."
+}
+
+Candidate Information:
+
+* Name: Priyanshu Khandelwal
+* Strong Python developer with experience in AI engineering and full-stack development
+* Experienced with LangChain, LangGraph, RAG systems, AI Agents, LLM integrations, OpenAI APIs, Google APIs, and workflow automation
+* Worked PetAlly, an AI-powered pet healthcare platform featuring multi-agent veterinary assistance and online vet consultation
+* Developed AI-powered applications involving document processing, data extraction, and automation workflows
+* Comfortable with Python, SQL, FastAPI, Flask, PostgreSQL, Docker
+* Passionate about Generative AI, Agentic AI Systems, and applied machine learning
+
+Email Requirements:
+
+1. Write as the candidate directly.
+2. Keep the email between 120 and 180 words.
+3. Maintain a professional, confident, and natural tone.
+4. Avoid sounding AI-generated or overly formal.
+5. Mention only the most relevant experience based on the provided job description.
+6. Highlight LangChain, LangGraph, RAG, AI Agents, or PetAlly only when relevant to the role.
+7. Explain briefly why the candidate is a strong fit.
+8. End with a short call-to-action expressing interest in discussing the opportunity.
+9. Do not include placeholders like [Your Name].
+10. Generate a personalized subject line specific to the company and role.
+
+Return only valid JSON.
+"""
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "Write a professional email as JSON with 'body' and 'subject' keys."),
+        ("system", System_prompt),
         ("human", "Resume: {resume_path}\n\nJob Description: {job_desc}\n\nCompany: {company}\n\nRole: {role}")
     ])
 
