@@ -34,6 +34,6 @@ jobs:
           GOOGLE_APP_PASSWORD: ${{ secrets.GOOGLE_APP_PASSWORD }}
           GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
           GOOGLE_CREDS_FILE: credentials.json
-          RESUME_PATH: Priyanshu_Resume_v2.pdf
+          RESUME_PATH: Priyanshu_Resume_v3.pdf
         run: |
           python app.py
