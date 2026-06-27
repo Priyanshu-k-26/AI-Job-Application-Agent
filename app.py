@@ -13,7 +13,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-model = ChatOpenAI()
+model = ChatOpenAI(
+    model="gpt-4.1-mini",
+    temperature=0.4
+)
 
 CREDS_FILE = os.getenv("GOOGLE_CREDS_FILE", "credentials.json")
 SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "Job Applications")
@@ -75,7 +78,7 @@ Candidate Information:
 * Mobile: +91 8889190396
 * Strong Python developer with experience in AI engineering and full-stack development
 * Experienced with LangChain, LangGraph, RAG systems, AI Agents, LLM integrations, OpenAI APIs, Google APIs, and workflow automation
-* Worked PetAlly, an AI-powered pet healthcare platform featuring multi-agent veterinary assistance and online vet consultation
+* Worked PetAlly, an AI-powered pet healthcare platform featuring multi-agent veterinary assistance and online vet consultation (1 year of exp in petally)
 * Developed AI-powered applications involving document processing, data extraction, and automation workflows
 * Comfortable with Python, SQL, FastAPI, Flask, PostgreSQL, Docker
 * Passionate about Generative AI, Agentic AI Systems, and applied machine learning
