@@ -38,9 +38,18 @@ class State(TypedDict):
 
 def fetch_next_pending_row(state: State) -> State:
     """Fetch the next pending row from Google Sheet and load it into state."""
-    gc = gspread.service_account(filename=CREDS_FILE)
-    sheet = gc.open(SHEET_NAME).sheet1
-    rows = sheet.get_all_records()
+    try:
+        gc = gspread.service_account(filename=CREDS_FILE)
+        sheet = gc.open(SHEET_NAME).sheet1
+        rows = sheet.get_all_records()
+    except gspread.exceptions.SpreadsheetNotFound:
+        state['has_pending'] = False
+        print(f"\n⚠️ Spreadsheet '{SHEET_NAME}' not found or not shared with the service account. Skipping run.")
+        return state
+    except Exception as e:
+        state['has_pending'] = False
+        print(f"\n⚠️ Unable to read Google Sheet '{SHEET_NAME}': {e}. Skipping run.")
+        return state
 
     for idx, row in enumerate(rows, start=2):
         if str(row["email_sent"]).lower() == "false":
