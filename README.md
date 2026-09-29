@@ -62,4 +62,4 @@ The script will:
 2. Generate a custom email using OpenAI.
 3. Send the email with the resume attached.
 4. Update the Google Sheet's `email_sent` column to `TRUE`.
-5. Repeat until all pending applications are processed.
+5. Repeat until all pending applications are processed
