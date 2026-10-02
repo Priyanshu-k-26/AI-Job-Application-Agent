@@ -36,14 +36,61 @@ class State(TypedDict):
     has_pending: bool
 
 
+def _get_already_emailed_addresses(rows) -> set:
+    """Return a set of email addresses that have already been sent (email_sent=TRUE)."""
+    return {
+        str(row["Email"]).strip().lower()
+        for row in rows
+        if str(row["email_sent"]).strip().upper() == "TRUE"
+    }
+
+
 def fetch_next_pending_row(state: State) -> State:
-    """Fetch the next pending row from Google Sheet and load it into state."""
+    """Fetch the next pending row from Google Sheet and load it into state.
+    
+    Skips rows whose email address has already been sent to (email_sent=TRUE)
+    or whose email address appeared in an earlier pending row (duplicate within
+    the same batch). This prevents sending more than one email per address.
+    """
     gc = gspread.service_account(filename=CREDS_FILE)
     sheet = gc.open(SHEET_NAME).sheet1
     rows = sheet.get_all_records()
 
+    # Collect emails that were already successfully sent
+    sent_emails = _get_already_emailed_addresses(rows)
+
+    # Track emails we've chosen to process in this batch (first pending occurrence wins)
+    seen_pending_emails: set = set()
+
     for idx, row in enumerate(rows, start=2):
-        if str(row["email_sent"]).lower() == "false":
+        if str(row["email_sent"]).strip().lower() == "false":
+            email = str(row["Email"]).strip().lower()
+
+            # Skip if this email was already sent in a previous run
+            if email in sent_emails:
+                print(f"⏭️  Skipping duplicate (already sent): {row['Email']} — {row['Company']}")
+                # Mark this duplicate row as SKIPPED in the sheet
+                try:
+                    headers = sheet.row_values(1)
+                    status_col = headers.index("email_sent") + 1
+                    sheet.update_cell(idx, status_col, "DUPLICATE")
+                except Exception as e:
+                    print(f"⚠️  Could not mark row {idx} as DUPLICATE: {e}")
+                continue
+
+            # Skip if we've already picked an earlier pending row with the same email
+            if email in seen_pending_emails:
+                print(f"⏭️  Skipping duplicate (earlier row pending): {row['Email']} — {row['Company']}")
+                try:
+                    headers = sheet.row_values(1)
+                    status_col = headers.index("email_sent") + 1
+                    sheet.update_cell(idx, status_col, "DUPLICATE")
+                except Exception as e:
+                    print(f"⚠️  Could not mark row {idx} as DUPLICATE: {e}")
+                continue
+
+            # First valid unsent occurrence — process this one
+            seen_pending_emails.add(email)
             state['company'] = row["Company"]
             state['receiver_address'] = row["Email"]
             state['job_desc'] = row["Description"]
