@@ -1,7 +1,9 @@
 import json
 import os
 import platform
+import re
 import shutil
+import socket
 import stat
 import subprocess
 import tarfile
@@ -19,20 +21,60 @@ RELEASE_URLS = {
     ("Linux", "aarch64"): "https://github.com/reacherhq/check-if-email-exists/releases/download/v0.11.10/check_if_email_exists-aarch64-unknown-linux-gnu.tar.gz",
 }
 
+# Cached port 25 reachability flag (None = unchecked)
+_PORT_25_ACCESSIBLE = None
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+
+def is_port_25_open() -> bool:
+    """Check once if outbound port 25 is accessible from the current environment."""
+    global _PORT_25_ACCESSIBLE
+    if _PORT_25_ACCESSIBLE is not None:
+        return _PORT_25_ACCESSIBLE
+
+    try:
+        # Quick 1.5-second socket probe to Google's public MX server
+        sock = socket.create_connection(("gmail-smtp-in.l.google.com", 25), timeout=1.5)
+        sock.close()
+        _PORT_25_ACCESSIBLE = True
+    except Exception:
+        _PORT_25_ACCESSIBLE = False
+
+    return _PORT_25_ACCESSIBLE
+
+
+def check_domain_has_mx(domain: str) -> bool:
+    """Fallback DNS MX check using nslookup (fast, no external dependencies)."""
+    try:
+        proc = subprocess.run(
+            ["nslookup", "-type=mx", domain],
+            capture_output=True,
+            text=True,
+            timeout=3
+        )
+        stdout = proc.stdout.lower()
+        if "mail exchanger" in stdout:
+            return True
+        if "server can't find" in stdout or "non-existent domain" in stdout:
+            return False
+        # If no explicit MX line found, fallback to checking A record
+        return bool(proc.returncode == 0)
+    except Exception:
+        # On lookup failure, don't falsely reject
+        return True
+
 
 def get_checker_binary() -> str:
     """Ensure check_if_email_exists binary is available, downloading if needed."""
-    # 1. System PATH
     sys_path = shutil.which(BINARY_NAME)
     if sys_path and os.access(sys_path, os.X_OK):
         return sys_path
 
-    # 2. Local project bin directory
     local_path = os.path.join(BIN_DIR, BINARY_NAME)
     if os.path.exists(local_path) and os.access(local_path, os.X_OK):
         return local_path
 
-    # 3. Auto-download from GitHub releases
     os.makedirs(BIN_DIR, exist_ok=True)
     system = platform.system()
     machine = platform.machine()
@@ -62,7 +104,7 @@ def get_checker_binary() -> str:
 
 
 def verify_email(to_email: str, sender_email: str = None) -> Tuple[bool, str]:
-    """Verify email validity using reacherhq/check-if-email-exists.
+    """Verify email validity using reacherhq/check-if-email-exists with smart environment fallback.
 
     Returns:
         (is_valid, reason):
@@ -70,9 +112,19 @@ def verify_email(to_email: str, sender_email: str = None) -> Tuple[bool, str]:
             is_valid = False if invalid / unreachable / bounce
     """
     to_email = str(to_email).strip()
-    if not to_email or "@" not in to_email:
-        return False, "Malformed or empty email address"
+    if not to_email or not EMAIL_REGEX.match(to_email):
+        return False, "Malformed or invalid email syntax"
 
+    domain = to_email.split("@")[-1].strip().lower()
+
+    # If outbound port 25 is blocked (e.g., inside GitHub Actions runners or restricted networks)
+    if not is_port_25_open():
+        # Avoid the slow 2.5-minute timeout. Perform instant DNS MX lookup
+        if not check_domain_has_mx(domain):
+            return False, f"Domain '{domain}' does not have active MX mail servers (bounces)"
+        return True, "Valid syntax and MX records (port 25 blocked in runner, skipped deep SMTP probe)"
+
+    # If port 25 is open (e.g. running locally on Mac or unblocked server), run reacherhq CLI
     try:
         binary_path = get_checker_binary()
         cmd = [binary_path]
@@ -80,7 +132,7 @@ def verify_email(to_email: str, sender_email: str = None) -> Tuple[bool, str]:
             cmd.extend(["--from-email", sender_email.strip()])
         cmd.append(to_email)
 
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         if proc.returncode != 0:
             print(f"⚠️  check_if_email_exists exited with code {proc.returncode}: {proc.stderr.strip()}")
             return True, f"Checker warning: {proc.stderr.strip()}"
@@ -103,7 +155,7 @@ def verify_email(to_email: str, sender_email: str = None) -> Tuple[bool, str]:
         if smtp.get("is_disabled", False):
             return False, "Mailbox is disabled"
 
-        # Unreachable / invalid recipient
+        # Explicitly rejected recipient
         if is_reachable == "invalid":
             return False, "Recipient address is invalid / unreachable (bounces)"
 
@@ -119,6 +171,7 @@ def verify_email(to_email: str, sender_email: str = None) -> Tuple[bool, str]:
 
 if __name__ == "__main__":
     import sys
-    email_to_test = sys.argv[1] if len(sys.argv) > 1 else "priyanshukhandelwal89@gmail.com"
-    valid, reason = verify_email(email_to_test)
-    print(f"Email: {email_to_test}\nValid: {valid}\nReason: {reason}")
+    test = sys.argv[1] if len(sys.argv) > 1 else "priyanshukhandelwal89@gmail.com"
+    valid, reason = verify_email(test)
+    print(f"Port 25 open: {is_port_25_open()}")
+    print(f"Email: {test}\nValid: {valid}\nReason: {reason}")
