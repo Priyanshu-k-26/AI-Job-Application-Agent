@@ -10,6 +10,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
 from dotenv import load_dotenv
+from email_validator import verify_email
 
 load_dotenv()
 
@@ -24,7 +25,7 @@ CREDS_FILE = os.getenv("GOOGLE_CREDS_FILE", "credentials.json")
 SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "Job Applications")
 
 
-class State(TypedDict):
+class State(TypedDict, total=False):
     receiver_address : str
     company : str
     role : str
@@ -34,33 +35,44 @@ class State(TypedDict):
     job_desc : str
     email_sent: bool
     has_pending: bool
+    is_bounce: bool
 
 
-def _get_already_emailed_addresses(rows) -> set:
-    """Return a set of email addresses that have already been sent (email_sent=TRUE)."""
+def _get_status_addresses(rows, status: str) -> set:
+    """Return a set of lowercase email addresses matching a given email_sent status."""
     return {
         str(row["Email"]).strip().lower()
         for row in rows
-        if str(row["email_sent"]).strip().upper() == "TRUE"
+        if str(row["email_sent"]).strip().upper() == status.upper()
     }
 
 
 def fetch_next_pending_row(state: State) -> State:
     """Fetch the next pending row from Google Sheet and load it into state.
     
-    Skips rows whose email address has already been sent to (email_sent=TRUE)
-    or whose email address appeared in an earlier pending row (duplicate within
-    the same batch). This prevents sending more than one email per address.
+    1. Skips duplicate addresses:
+       - Already sent (email_sent=TRUE) -> marks DUPLICATE
+       - Earlier pending row with same email -> marks DUPLICATE
+    2. Skips bounces:
+       - Known bounced addresses in sheet -> marks BOUNCE
+       - Verifies deliverability via reacherhq/check-if-email-exists:
+         If invalid/unreachable/bouncing -> marks BOUNCE
+    3. Loads the first valid deliverable unsent application into state.
     """
     gc = gspread.service_account(filename=CREDS_FILE)
     sheet = gc.open(SHEET_NAME).sheet1
     rows = sheet.get_all_records()
 
-    # Collect emails that were already successfully sent
-    sent_emails = _get_already_emailed_addresses(rows)
+    headers = sheet.row_values(1)
+    status_col = headers.index("email_sent") + 1
+
+    # Collect emails that were already successfully sent or bounced
+    sent_emails = _get_status_addresses(rows, "TRUE")
+    bounced_emails = _get_status_addresses(rows, "BOUNCE")
 
     # Track emails we've chosen to process in this batch (first pending occurrence wins)
     seen_pending_emails: set = set()
+    sender_email = os.getenv("EMAIL")
 
     for idx, row in enumerate(rows, start=2):
         if str(row["email_sent"]).strip().lower() == "false":
@@ -69,10 +81,7 @@ def fetch_next_pending_row(state: State) -> State:
             # Skip if this email was already sent in a previous run
             if email in sent_emails:
                 print(f"⏭️  Skipping duplicate (already sent): {row['Email']} — {row['Company']}")
-                # Mark this duplicate row as SKIPPED in the sheet
                 try:
-                    headers = sheet.row_values(1)
-                    status_col = headers.index("email_sent") + 1
                     sheet.update_cell(idx, status_col, "DUPLICATE")
                 except Exception as e:
                     print(f"⚠️  Could not mark row {idx} as DUPLICATE: {e}")
@@ -82,11 +91,30 @@ def fetch_next_pending_row(state: State) -> State:
             if email in seen_pending_emails:
                 print(f"⏭️  Skipping duplicate (earlier row pending): {row['Email']} — {row['Company']}")
                 try:
-                    headers = sheet.row_values(1)
-                    status_col = headers.index("email_sent") + 1
                     sheet.update_cell(idx, status_col, "DUPLICATE")
                 except Exception as e:
                     print(f"⚠️  Could not mark row {idx} as DUPLICATE: {e}")
+                continue
+
+            # Skip if this email previously bounced
+            if email in bounced_emails:
+                print(f"🛑 Skipping duplicate bounce: {row['Email']} — {row['Company']}")
+                try:
+                    sheet.update_cell(idx, status_col, "BOUNCE")
+                except Exception as e:
+                    print(f"⚠️  Could not mark row {idx} as BOUNCE: {e}")
+                continue
+
+            # Check email deliverability using reacherhq/check-if-email-exists
+            print(f"🔍 Checking deliverability: {row['Email']} ...")
+            is_valid, reason = verify_email(email, sender_email=sender_email)
+            if not is_valid:
+                print(f"🛑 Skipping invalid/bouncing email: {row['Email']} — {row['Company']} ({reason})")
+                bounced_emails.add(email)
+                try:
+                    sheet.update_cell(idx, status_col, "BOUNCE")
+                except Exception as e:
+                    print(f"⚠️  Could not mark row {idx} as BOUNCE: {e}")
                 continue
 
             # First valid unsent occurrence — process this one
@@ -235,6 +263,7 @@ def send_email(state: State) -> State:
     except smtplib.SMTPRecipientsRefused:
         print(f"❌ Error: Recipient refused — invalid address: {receiver_address}")
         state['email_sent'] = False
+        state['is_bounce'] = True
     except Exception as e:
         print(f"❌ Error sending email: {e}")
         state['email_sent'] = False
@@ -249,9 +278,12 @@ def send_email(state: State) -> State:
             headers = sheet.row_values(1)
             status_col = headers.index("email_sent") + 1
 
-            if state['email_sent']:
+            if state.get('email_sent'):
                 sheet.update_cell(row_number, status_col, "TRUE")
                 print(f"📝 Sheet updated: row {row_number} → email_sent = TRUE")
+            elif state.get('is_bounce'):
+                sheet.update_cell(row_number, status_col, "BOUNCE")
+                print(f"📝 Sheet updated: row {row_number} → email_sent = BOUNCE")
             else:
                 sheet.update_cell(row_number, status_col, "FALSE")
                 print(f"📝 Sheet updated: row {row_number} → email_sent = FALSE")

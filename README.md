@@ -7,6 +7,8 @@ This agent automatically reads pending job applications from a Google Sheet, use
 ## Features
 - **LangGraph Orchestration**: Uses LangGraph's state machine to manage the flow of fetching data, generating emails, and sending them.
 - **Google Sheets Integration**: Automatically fetches rows marked as `pending` or `FALSE` for `email_sent` and updates them after processing.
+- **Deduplication**: Automatically skips previously sent or repeatedly pending addresses and marks them as `DUPLICATE` in the sheet.
+- **Email Validation & Bounce Detection**: Integrates with [reacherhq/check-if-email-exists](https://github.com/reacherhq/check-if-email-exists) to verify email existence, MX records, syntax, and deliverability before sending. Invalid or bouncing emails are automatically flagged as `BOUNCE` in the sheet.
 - **AI-Powered Emails**: Leverages OpenAI models via LangChain to generate contextual emails based on the specific job description and company.
 - **Automated Email Sending**: Connects via Gmail SMTP to dispatch emails with your resume attached natively as a PDF.
 
